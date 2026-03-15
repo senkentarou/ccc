@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ccc - データモデル設計</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-dim: #1f3a5f;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+  }
+  h1 {
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+  }
+  h2 {
+    font-size: 1.4rem;
+    margin: 2rem 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  h3 {
+    font-size: 1.1rem;
+    margin: 1.5rem 0 0.5rem;
+    color: var(--accent);
+  }
+  p { margin-bottom: 0.8rem; color: var(--text-muted); }
+  .subtitle { color: var(--text-muted); margin-bottom: 2rem; }
+
+  /* Navigation */
+  nav {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+  nav ul { list-style: none; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  nav a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.9rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    transition: background 0.15s;
+  }
+  nav a:hover { background: var(--accent-dim); }
+
+  /* ER Diagram */
+  .mermaid-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2rem;
+    margin: 1rem 0;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  thead { background: var(--accent-dim); }
+  th {
+    text-align: left;
+    padding: 0.7rem 1rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+  }
+  td {
+    padding: 0.6rem 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  tr:hover td { background: rgba(88, 166, 255, 0.05); }
+  code {
+    background: var(--bg);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.85rem;
+    color: var(--green);
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge-pk { background: #1f3a5f; color: #58a6ff; }
+  .badge-fk { background: #2a1f3f; color: #bc8cff; }
+  .badge-required { background: #2a1f1f; color: #f85149; }
+  .badge-optional { background: #1f2a1f; color: #3fb950; }
+
+  /* Sample data */
+  .sample-data td { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem; }
+  .sample-data .role-user { color: var(--green); }
+  .sample-data .role-assistant { color: var(--yellow); }
+
+  /* Section card */
+  .section-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>ccc — データモデル設計</h1>
+<p class="subtitle">Claude Code チャット履歴ビューア / セッション復元TUIツール</p>
+
+<nav>
+  <ul>
+    <li><a href="#er-diagram">ER図</a></li>
+    <li><a href="#session">Session</a></li>
+    <li><a href="#message">Message</a></li>
+    <li><a href="#search-index">SearchIndex</a></li>
+    <li><a href="#relations">リレーション一覧</a></li>
+    <li><a href="#sample-data">サンプルデータ</a></li>
+  </ul>
+</nav>
+
+<!-- ER Diagram -->
+<h2 id="er-diagram">ER図</h2>
+<div class="mermaid-container">
+  <pre class="mermaid">
+erDiagram
+    Session ||--o{ Message : "contains"
+
+    Session {
+        String session_id PK
+        String project_path
+        DateTime first_timestamp
+        DateTime last_timestamp
+        Int message_count
+        String cwd
+    }
+
+    Message {
+        String session_id FK
+        Int index
+        String role "user | assistant"
+        String content
+        DateTime timestamp
+    }
+
+    SearchIndex ||--o{ Session : "ranks"
+
+    SearchIndex {
+        String query
+        Float score
+        String matched_fragments
+    }
+  </pre>
+</div>
+
+<!-- Session Table -->
+<h2 id="session">Session</h2>
+<p>セッション単位の概要情報。JSONLファイル1つにつき1つのSessionが生成される。</p>
+<table>
+  <thead>
+    <tr>
+      <th>フィールド</th>
+      <th>型</th>
+      <th>NULL</th>
+      <th>制約</th>
+      <th>説明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>session_id</code></td>
+      <td><code>String</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td><span class="badge badge-pk">PK</span></td>
+      <td>セッション一意識別子。JSONLファイル名（拡張子除く）から取得</td>
+    </tr>
+    <tr>
+      <td><code>project_path</code></td>
+      <td><code>String</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>プロジェクトのパス。~/.claude/projects/ 配下のディレクトリ名</td>
+    </tr>
+    <tr>
+      <td><code>first_timestamp</code></td>
+      <td><code>DateTime</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>セッション内の最初のメッセージのタイムスタンプ</td>
+    </tr>
+    <tr>
+      <td><code>last_timestamp</code></td>
+      <td><code>DateTime</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>セッション内の最後のメッセージのタイムスタンプ</td>
+    </tr>
+    <tr>
+      <td><code>message_count</code></td>
+      <td><code>usize</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>セッション内のメッセージ総数</td>
+    </tr>
+    <tr>
+      <td><code>cwd</code></td>
+      <td><code>String</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>セッション開始時の作業ディレクトリ</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- Message Table -->
+<h2 id="message">Message</h2>
+<p>セッション内の個々のメッセージ。user と assistant の両方を保持する。</p>
+<table>
+  <thead>
+    <tr>
+      <th>フィールド</th>
+      <th>型</th>
+      <th>NULL</th>
+      <th>制約</th>
+      <th>説明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>session_id</code></td>
+      <td><code>String</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td><span class="badge badge-fk">FK → Session</span></td>
+      <td>所属するセッションのID</td>
+    </tr>
+    <tr>
+      <td><code>index</code></td>
+      <td><code>usize</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>セッション内のメッセージ順序（0始まり）</td>
+    </tr>
+    <tr>
+      <td><code>role</code></td>
+      <td><code>Role (enum)</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td><code>User</code> または <code>Assistant</code></td>
+    </tr>
+    <tr>
+      <td><code>content</code></td>
+      <td><code>String</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>メッセージ本文。content配列の場合はtextフィールドを結合</td>
+    </tr>
+    <tr>
+      <td><code>timestamp</code></td>
+      <td><code>DateTime</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>メッセージのタイムスタンプ（ISO 8601）</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- SearchIndex -->
+<h2 id="search-index">SearchIndex（ランタイム）</h2>
+<p>永続化しないランタイム構造。ファジー検索時にセッションをスコアリングする。</p>
+<table>
+  <thead>
+    <tr>
+      <th>フィールド</th>
+      <th>型</th>
+      <th>NULL</th>
+      <th>制約</th>
+      <th>説明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>query</code></td>
+      <td><code>String</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>ユーザーが入力した検索クエリ</td>
+    </tr>
+    <tr>
+      <td><code>score</code></td>
+      <td><code>f64</code></td>
+      <td><span class="badge badge-required">NOT NULL</span></td>
+      <td>—</td>
+      <td>ファジーマッチのスコア（高い方が関連度が高い）</td>
+    </tr>
+    <tr>
+      <td><code>matched_fragments</code></td>
+      <td><code>Vec&lt;String&gt;</code></td>
+      <td><span class="badge badge-optional">OPTIONAL</span></td>
+      <td>—</td>
+      <td>マッチした箇所のテキスト断片（ハイライト用）</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- Relations -->
+<h2 id="relations">リレーション一覧</h2>
+<table>
+  <thead>
+    <tr>
+      <th>親</th>
+      <th>子</th>
+      <th>カーディナリティ</th>
+      <th>外部キー</th>
+      <th>説明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>Session</code></td>
+      <td><code>Message</code></td>
+      <td>1 : 0..N</td>
+      <td><code>Message.session_id → Session.session_id</code></td>
+      <td>1つのセッションが0個以上のメッセージを持つ</td>
+    </tr>
+    <tr>
+      <td><code>Session</code></td>
+      <td><code>SearchIndex</code></td>
+      <td>1 : 0..1</td>
+      <td>ランタイム参照</td>
+      <td>検索時に各セッションにスコアが付与される</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- Sample Data -->
+<h2 id="sample-data">サンプルデータ</h2>
+
+<h3>Session</h3>
+<table class="sample-data">
+  <thead>
+    <tr>
+      <th>session_id</th>
+      <th>project_path</th>
+      <th>first_timestamp</th>
+      <th>last_timestamp</th>
+      <th>message_count</th>
+      <th>cwd</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>a1b2c3d4</code></td>
+      <td>-Users-masahiro-work-ccc</td>
+      <td>2026-03-15T14:30:00Z</td>
+      <td>2026-03-15T15:45:00Z</td>
+      <td>24</td>
+      <td>/Users/masahiro/work/ccc</td>
+    </tr>
+    <tr>
+      <td><code>e5f6g7h8</code></td>
+      <td>-Users-masahiro-work-ccc</td>
+      <td>2026-03-14T09:00:00Z</td>
+      <td>2026-03-14T10:30:00Z</td>
+      <td>16</td>
+      <td>/Users/masahiro/work/ccc</td>
+    </tr>
+    <tr>
+      <td><code>i9j0k1l2</code></td>
+      <td>-Users-masahiro-work-ccc</td>
+      <td>2026-03-13T20:00:00Z</td>
+      <td>2026-03-13T21:15:00Z</td>
+      <td>8</td>
+      <td>/Users/masahiro/work/ccc</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Message</h3>
+<table class="sample-data">
+  <thead>
+    <tr>
+      <th>session_id</th>
+      <th>index</th>
+      <th>role</th>
+      <th>content (抜粋)</th>
+      <th>timestamp</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>a1b2c3d4</code></td>
+      <td>0</td>
+      <td><span class="role-user">user</span></td>
+      <td>RustでHTTPサーバーを作りたい。axumを使って</td>
+      <td>2026-03-15T14:30:00Z</td>
+    </tr>
+    <tr>
+      <td><code>a1b2c3d4</code></td>
+      <td>1</td>
+      <td><span class="role-assistant">assistant</span></td>
+      <td>axumを使ったHTTPサーバーの基本構成を提案します...</td>
+      <td>2026-03-15T14:30:15Z</td>
+    </tr>
+    <tr>
+      <td><code>a1b2c3d4</code></td>
+      <td>2</td>
+      <td><span class="role-user">user</span></td>
+      <td>エラーハンドリングも追加して</td>
+      <td>2026-03-15T14:35:00Z</td>
+    </tr>
+    <tr>
+      <td><code>e5f6g7h8</code></td>
+      <td>0</td>
+      <td><span class="role-user">user</span></td>
+      <td>ratatuiで3ペインレイアウトを作る方法を教えて</td>
+      <td>2026-03-14T09:00:00Z</td>
+    </tr>
+    <tr>
+      <td><code>e5f6g7h8</code></td>
+      <td>1</td>
+      <td><span class="role-assistant">assistant</span></td>
+      <td>ratatuiでは Layout::default().constraints() を使って...</td>
+      <td>2026-03-14T09:00:20Z</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>SearchIndex（検索クエリ "http server" の結果例）</h3>
+<table class="sample-data">
+  <thead>
+    <tr>
+      <th>query</th>
+      <th>session_id</th>
+      <th>score</th>
+      <th>matched_fragments</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>http server</td>
+      <td><code>a1b2c3d4</code></td>
+      <td>0.92</td>
+      <td>["RustでHTTPサーバーを作りたい", "HTTPサーバーの基本構成を提案"]</td>
+    </tr>
+    <tr>
+      <td>http server</td>
+      <td><code>e5f6g7h8</code></td>
+      <td>0.15</td>
+      <td>[]</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-card" style="margin-top: 2rem;">
+  <h3>補足: データソース</h3>
+  <p>すべてのデータは <code>~/.claude/projects/&lt;project-path-hash&gt;/&lt;session-id&gt;.jsonl</code> から読み取り専用でロードされます。<br>
+  ccc は一切のデータ書き込みを行いません。永続化が必要な機能（ブックマーク等）はPhase 2 で別途検討します。</p>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#1f3a5f',
+      primaryTextColor: '#e6edf3',
+      primaryBorderColor: '#58a6ff',
+      lineColor: '#58a6ff',
+      secondaryColor: '#161b22',
+      tertiaryColor: '#0d1117'
+    }
+  });
+</script>
+</body>
+</html>

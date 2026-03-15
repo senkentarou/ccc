@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ccc - TUI Mockup</title>
+<style>
+  :root {
+    --bg: #1e1e2e;
+    --fg: #cdd6f4;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --blue: #89b4fa;
+    --cyan: #94e2d5;
+    --dark-gray: #6c7086;
+    --surface: #313244;
+    --selection: #45475a;
+    --border: #45475a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'SF Mono', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Menlo', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 8px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .container { display: flex; flex: 1; min-height: 0; }
+
+  .left-pane {
+    width: 40%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid var(--border);
+    border-right: none;
+  }
+
+  .right-pane {
+    width: 60%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid var(--border);
+  }
+
+  /* Search */
+  .search-pane {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .search-input {
+    padding: 8px 12px;
+    color: var(--fg);
+    display: flex;
+    align-items: center;
+  }
+
+  .search-input .query { color: var(--fg); }
+  .search-input .placeholder { color: var(--dark-gray); }
+
+  .search-input .cursor {
+    display: inline-block;
+    width: 1ch;
+    height: 1.2em;
+    background: var(--fg);
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .search-count { color: var(--dark-gray); font-size: 11px; }
+
+  /* Messages */
+  .messages-pane {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .message-item {
+    padding: 2px 1ch;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+  }
+
+  .message-item .prefix {
+    display: inline-block;
+    width: 2ch;
+    color: var(--dark-gray);
+  }
+
+  .message-item.selected { background: var(--selection); }
+  .message-item.selected .prefix { color: var(--cyan); }
+  .message-item .match { color: var(--yellow); font-weight: bold; }
+
+  /* Session separator */
+  .session-separator {
+    padding: 4px 1ch 3px;
+    color: var(--dark-gray);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 1ch;
+    margin-top: 4px;
+  }
+
+  .session-separator:first-child { margin-top: 2px; }
+
+  .session-separator::before,
+  .session-separator::after {
+    content: '';
+    flex-shrink: 1;
+    min-width: 2ch;
+    border-top: 1px solid var(--border);
+  }
+
+  .session-separator::after { flex: 1; }
+
+  .session-separator .sep-id { color: var(--dark-gray); white-space: nowrap; }
+  .session-separator .sep-branch { color: var(--dark-gray); white-space: nowrap; }
+  .session-separator .sep-branch.current { color: var(--fg); }
+
+  /* Branch pane */
+  .branch-pane {
+    flex-shrink: 0;
+    padding: 2px 0;
+  }
+
+  .branch-item {
+    padding: 2px 1ch;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+    color: var(--dark-gray);
+  }
+
+  .branch-item .prefix {
+    display: inline-block;
+    width: 2ch;
+    color: var(--dark-gray);
+  }
+
+  .branch-item.selected { background: var(--selection); }
+  .branch-item.selected .prefix { color: var(--cyan); }
+  .branch-item.selected .branch-name { color: var(--cyan); }
+
+  .branch-name { color: var(--dark-gray); }
+  .branch-name.current { color: var(--fg); }
+
+  /* Preview */
+  .preview-pane {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding: 8px 12px;
+  }
+
+  .preview-pane .role-user { color: var(--blue); font-weight: bold; margin-top: 10px; }
+  .preview-pane .role-user:first-child { margin-top: 0; }
+  .preview-pane .role-assistant { color: var(--green); font-weight: bold; margin-top: 10px; }
+  .preview-pane .user-content, .preview-pane .assistant-content { color: var(--fg); margin: 3px 0 6px 0; }
+
+  .preview-pane .code-block {
+    background: var(--surface);
+    border-left: 2px solid var(--green);
+    padding: 6px 1ch;
+    margin: 6px 0;
+    color: var(--green);
+    font-size: 12px;
+    overflow-x: auto;
+  }
+
+  .preview-pane .code-lang { color: var(--dark-gray); font-size: 11px; margin-bottom: 2px; }
+  .preview-pane .inline-code { color: var(--green); }
+  .preview-pane .list-item { padding-left: 2ch; }
+  .preview-pane .list-bullet { color: var(--yellow); }
+  .preview-pane .separator { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+
+  /* Preview short mode */
+  .preview-short-item {
+    display: flex;
+    padding: 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .preview-short-item .short-role {
+    flex-shrink: 0;
+    width: 6ch;
+    font-weight: bold;
+  }
+
+  .preview-short-item .short-role.user { color: var(--blue); }
+  .preview-short-item .short-role.asst { color: var(--green); }
+
+  .preview-short-item .short-content {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .preview-short-separator {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 6px 0;
+  }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: var(--dark-gray);
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 1ch;
+    padding: 3px 0;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .status-badge {
+    background: var(--cyan);
+    color: var(--bg);
+    padding: 0 1ch;
+    font-weight: bold;
+    font-size: 11px;
+  }
+
+  .status-info { color: var(--dark-gray); }
+  .status-help { color: var(--dark-gray); font-size: 11px; }
+  .status-divider { color: var(--border); }
+
+  /* Variant tabs */
+  .variant-tabs { display: flex; gap: 0; margin-bottom: 12px; }
+
+  .variant-tab {
+    padding: 4px 12px;
+    background: var(--surface);
+    color: var(--dark-gray);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+  }
+
+  .variant-tab:first-child { border-radius: 4px 0 0 4px; }
+  .variant-tab:last-child { border-radius: 0 4px 4px 0; }
+  .variant-tab.active { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+  .variant-tab:hover:not(.active) { background: var(--selection); }
+
+  .state-container { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .hidden { display: none !important; }
+  .page-title { color: var(--dark-gray); font-size: 11px; text-align: center; padding: 4px 0; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div class="page-title">ccc - TUI Mockup</div>
+
+<div class="variant-tabs">
+  <button class="variant-tab active" onclick="showState('normal')">Normal</button>
+  <button class="variant-tab" onclick="showState('searching')">Searching</button>
+  <button class="variant-tab" onclick="showState('branch')">Branch Filter</button>
+  <button class="variant-tab" onclick="showState('short')">Short Preview</button>
+  <button class="variant-tab" onclick="showState('empty')">No Results</button>
+  <button class="variant-tab" onclick="showState('copied')">Copied</button>
+</div>
+
+<!-- Normal State -->
+<div id="state-normal" class="state-container">
+  <div class="container">
+    <div class="left-pane">
+      <div class="search-pane">
+        <div class="search-input">
+          <span class="placeholder">type to search...</span>
+          <span style="flex:1"></span>
+          <span class="search-count">24/24</span>
+        </div>
+      </div>
+
+      <div class="messages-pane">
+        <div class="session-separator"><span class="sep-id">85449c0d-f9d4-4c1e-899f-9f0e72d0d7d4</span> <span class="sep-branch current">main</span></div>
+        <div class="message-item selected"><span class="prefix">&gt; </span>RustでHTTPサーバーを作りたい</div>
+        <div class="message-item"><span class="prefix">  </span>エラーハンドリングも追加して</div>
+        <div class="message-item"><span class="prefix">  </span>テスト書いて</div>
+        <div class="message-item"><span class="prefix">  </span>CORSの設定どうすれば</div>
+        <div class="message-item"><span class="prefix">  </span>レスポンスのフォーマットを変えたい</div>
+        <div class="message-item"><span class="prefix">  </span>ログミドルウェア追加して</div>
+        <div class="session-separator"><span class="sep-id">a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d</span> <span class="sep-branch">feat/api</span></div>
+        <div class="message-item"><span class="prefix">  </span>REST APIのエンドポイント設計して</div>
+        <div class="message-item"><span class="prefix">  </span>認証ミドルウェア追加して</div>
+        <div class="message-item"><span class="prefix">  </span>OpenAPI specを生成したい</div>
+        <div class="session-separator"><span class="sep-id">e5f6a7b8-1234-4def-abcd-567890abcdef</span> <span class="sep-branch current">main</span></div>
+        <div class="message-item"><span class="prefix">  </span>Dockerfileを作って</div>
+        <div class="message-item"><span class="prefix">  </span>マルチステージビルドにしたい</div>
+        <div class="session-separator"><span class="sep-id">c9d0e1f2-3456-4abc-8def-0123456789ab</span> <span class="sep-branch">feat/ci</span></div>
+        <div class="message-item"><span class="prefix">  </span>GitHub Actionsのワークフロー作って</div>
+        <div class="message-item"><span class="prefix">  </span>テストカバレッジをCIに追加したい</div>
+      </div>
+
+      <div class="branch-pane">
+        <div class="branch-item selected"><span class="prefix">▶ </span><span class="branch-name">all</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name current">main</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/api</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/ci</span></div>
+      </div>
+    </div>
+
+    <div class="right-pane">
+      <div class="preview-pane">
+        <div class="role-user">User:</div>
+        <div class="user-content">&gt; RustでHTTPサーバーを作りたい</div>
+
+        <div class="role-assistant">Assistant:</div>
+        <div class="assistant-content">
+          <span class="inline-code">`axum`</span> を使った実装を提案します。高速で型安全なWebフレームワークです。
+        </div>
+        <div class="code-block">
+          <div class="code-lang">rust</div>
+use axum::{Router, routing::get};
+use std::net::SocketAddr;
+
+async fn hello() -&gt; &amp;'static str {
+    "Hello, World!"
+}
+
+#[tokio::main]
+async fn main() {
+    let app = Router::new()
+        .route("/", get(hello));
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    axum::Server::bind(&amp;addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+}
+        </div>
+        <div class="assistant-content">基本的なサーバーが動きます。次のステップとして：</div>
+        <div class="list-item"><span class="list-bullet">• </span>ルーティングの追加</div>
+        <div class="list-item"><span class="list-bullet">• </span>エラーハンドリング</div>
+        <div class="list-item"><span class="list-bullet">• </span>ミドルウェア（ログ、CORS）</div>
+
+        <hr class="separator">
+
+        <div class="role-user">User:</div>
+        <div class="user-content">&gt; エラーハンドリングも追加して</div>
+
+        <div class="role-assistant">Assistant:</div>
+        <div class="assistant-content">
+          エラーハンドリングを追加しました。<span class="inline-code">`thiserror`</span> と <span class="inline-code">`anyhow`</span> を使います。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-badge">both</span>
+    <span class="status-info">24 msgs</span>
+    <span class="status-divider">│</span>
+    <span class="status-help">C-j/k:msg  Opt-↑↓:branch  C-d/u:scroll  gg/G:top/btm  Tab:short/full  Enter:resume  C-y:copy</span>
+  </div>
+</div>
+
+<!-- Searching State -->
+<div id="state-searching" class="state-container hidden">
+  <div class="container">
+    <div class="left-pane">
+      <div class="search-pane">
+        <div class="search-input">
+          <span class="query">http ser</span>
+          <span class="cursor"></span>
+          <span style="flex:1"></span>
+          <span class="search-count">3/24</span>
+        </div>
+      </div>
+
+      <div class="messages-pane">
+        <div class="session-separator"><span class="sep-id">85449c0d-f9d4-4c1e-899f-9f0e72d0d7d4</span> <span class="sep-branch current">main</span></div>
+        <div class="message-item selected"><span class="prefix">&gt; </span>Rustで<span class="match">HTTP</span> <span class="match">ser</span>バーを作りたい</div>
+        <div class="message-item"><span class="prefix">  </span>CORSの設定どうすれば</div>
+        <div class="session-separator"><span class="sep-id">e5f6a7b8-1234-4def-abcd-567890abcdef</span> <span class="sep-branch current">main</span></div>
+        <div class="message-item"><span class="prefix">  </span>Dockerで<span class="match">HTTP</span> <span class="match">ser</span>ver動かしたい</div>
+      </div>
+
+      <div class="branch-pane">
+        <div class="branch-item selected"><span class="prefix">▶ </span><span class="branch-name">all</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name current">main</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/api</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/ci</span></div>
+      </div>
+    </div>
+
+    <div class="right-pane">
+      <div class="preview-pane">
+        <div class="role-user">User:</div>
+        <div class="user-content">&gt; Rustで<span class="match">HTTP</span>サーバーを作りたい</div>
+
+        <div class="role-assistant">Assistant:</div>
+        <div class="assistant-content">
+          <span class="inline-code">`axum`</span> を使った実装を提案します。
+        </div>
+        <div class="code-block">
+          <div class="code-lang">rust</div>
+use axum::{Router, routing::get};
+
+#[tokio::main]
+async fn main() {
+    let app = Router::new()
+        .route("/", get(|| async { "Hello" }));
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+        .await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+        </div>
+
+        <hr class="separator">
+
+        <div class="role-user">User:</div>
+        <div class="user-content">&gt; エラーハンドリングも追加して</div>
+
+        <div class="role-assistant">Assistant:</div>
+        <div class="assistant-content">エラーハンドリングを追加しました。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-badge">both</span>
+    <span class="status-info">3/24 msgs</span>
+    <span class="status-divider">│</span>
+    <span class="status-help">C-j/k:msg  Opt-↑↓:branch  C-d/u:scroll  gg/G:top/btm  Tab:short/full  Enter:resume  C-y:copy</span>
+  </div>
+</div>
+
+<!-- Branch Filter State: main selected -->
+<div id="state-branch" class="state-container hidden">
+  <div class="container">
+    <div class="left-pane">
+      <div class="search-pane">
+        <div class="search-input">
+          <span class="placeholder">type to search...</span>
+          <span style="flex:1"></span>
+          <span class="search-count">8/24</span>
+        </div>
+      </div>
+
+      <div class="messages-pane">
+        <div class="session-separator"><span class="sep-id">85449c0d-f9d4-4c1e-899f-9f0e72d0d7d4</span> <span class="sep-branch current">main</span></div>
+        <div class="message-item selected"><span class="prefix">&gt; </span>RustでHTTPサーバーを作りたい</div>
+        <div class="message-item"><span class="prefix">  </span>エラーハンドリングも追加して</div>
+        <div class="message-item"><span class="prefix">  </span>テスト書いて</div>
+        <div class="message-item"><span class="prefix">  </span>CORSの設定どうすれば</div>
+        <div class="message-item"><span class="prefix">  </span>レスポンスのフォーマットを変えたい</div>
+        <div class="message-item"><span class="prefix">  </span>ログミドルウェア追加して</div>
+        <div class="session-separator"><span class="sep-id">e5f6a7b8-1234-4def-abcd-567890abcdef</span> <span class="sep-branch current">main</span></div>
+        <div class="message-item"><span class="prefix">  </span>Dockerfileを作って</div>
+        <div class="message-item"><span class="prefix">  </span>マルチステージビルドにしたい</div>
+      </div>
+
+      <div class="branch-pane">
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">all</span></div>
+        <div class="branch-item selected"><span class="prefix">▶ </span><span class="branch-name current">main</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/api</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/ci</span></div>
+      </div>
+    </div>
+
+    <div class="right-pane">
+      <div class="preview-pane">
+        <div class="role-user">User:</div>
+        <div class="user-content">&gt; RustでHTTPサーバーを作りたい</div>
+
+        <div class="role-assistant">Assistant:</div>
+        <div class="assistant-content">
+          <span class="inline-code">`axum`</span> を使った実装を提案します。
+        </div>
+        <div class="code-block">
+          <div class="code-lang">rust</div>
+use axum::{Router, routing::get};
+
+#[tokio::main]
+async fn main() {
+    let app = Router::new()
+        .route("/", get(|| async { "Hello" }));
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+        .await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-badge">both</span>
+    <span class="status-info">8/24 msgs</span>
+    <span class="status-divider">│</span>
+    <span class="status-help">C-j/k:msg  Opt-↑↓:branch  C-d/u:scroll  gg/G:top/btm  Tab:short/full  Enter:resume  C-y:copy</span>
+  </div>
+</div>
+
+<!-- Short Preview State -->
+<div id="state-short" class="state-container hidden">
+  <div class="container">
+    <div class="left-pane">
+      <div class="search-pane">
+        <div class="search-input">
+          <span class="placeholder">type to search...</span>
+          <span style="flex:1"></span>
+          <span class="search-count">24/24</span>
+        </div>
+      </div>
+
+      <div class="messages-pane">
+        <div class="session-separator"><span class="sep-id">85449c0d-f9d4-4c1e-899f-9f0e72d0d7d4</span> <span class="sep-branch current">main</span></div>
+        <div class="message-item selected"><span class="prefix">&gt; </span>RustでHTTPサーバーを作りたい</div>
+        <div class="message-item"><span class="prefix">  </span>エラーハンドリングも追加して</div>
+        <div class="message-item"><span class="prefix">  </span>テスト書いて</div>
+        <div class="message-item"><span class="prefix">  </span>CORSの設定どうすれば</div>
+        <div class="message-item"><span class="prefix">  </span>レスポンスのフォーマットを変えたい</div>
+        <div class="message-item"><span class="prefix">  </span>ログミドルウェア追加して</div>
+        <div class="session-separator"><span class="sep-id">a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d</span> <span class="sep-branch">feat/api</span></div>
+        <div class="message-item"><span class="prefix">  </span>REST APIのエンドポイント設計して</div>
+        <div class="message-item"><span class="prefix">  </span>認証ミドルウェア追加して</div>
+        <div class="message-item"><span class="prefix">  </span>OpenAPI specを生成したい</div>
+        <div class="session-separator"><span class="sep-id">e5f6a7b8-1234-4def-abcd-567890abcdef</span> <span class="sep-branch current">main</span></div>
+        <div class="message-item"><span class="prefix">  </span>Dockerfileを作って</div>
+        <div class="message-item"><span class="prefix">  </span>マルチステージビルドにしたい</div>
+        <div class="session-separator"><span class="sep-id">c9d0e1f2-3456-4abc-8def-0123456789ab</span> <span class="sep-branch">feat/ci</span></div>
+        <div class="message-item"><span class="prefix">  </span>GitHub Actionsのワークフロー作って</div>
+        <div class="message-item"><span class="prefix">  </span>テストカバレッジをCIに追加したい</div>
+      </div>
+
+      <div class="branch-pane">
+        <div class="branch-item selected"><span class="prefix">▶ </span><span class="branch-name">all</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name current">main</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/api</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/ci</span></div>
+      </div>
+    </div>
+
+    <div class="right-pane">
+      <div class="preview-pane">
+        <div class="preview-short-item"><span class="short-role user">User:</span><span class="short-content">RustでHTTPサーバーを作りたい</span></div>
+        <div class="preview-short-item"><span class="short-role asst">Asst:</span><span class="short-content">axum を使った実装を提案します。高速で型安全なWebフレームワークです。</span></div>
+        <hr class="preview-short-separator">
+        <div class="preview-short-item"><span class="short-role user">User:</span><span class="short-content">エラーハンドリングも追加して</span></div>
+        <div class="preview-short-item"><span class="short-role asst">Asst:</span><span class="short-content">エラーハンドリングを追加しました。thiserror と anyhow を使います。</span></div>
+        <hr class="preview-short-separator">
+        <div class="preview-short-item"><span class="short-role user">User:</span><span class="short-content">テスト書いて</span></div>
+        <div class="preview-short-item"><span class="short-role asst">Asst:</span><span class="short-content">ユニットテストを追加しました。主要な関数をカバーしています。</span></div>
+        <hr class="preview-short-separator">
+        <div class="preview-short-item"><span class="short-role user">User:</span><span class="short-content">CORSの設定どうすれば</span></div>
+        <div class="preview-short-item"><span class="short-role asst">Asst:</span><span class="short-content">tower-http の CorsLayer を使います。許可するオリジンとメソッドを設定…</span></div>
+        <hr class="preview-short-separator">
+        <div class="preview-short-item"><span class="short-role user">User:</span><span class="short-content">レスポンスのフォーマットを変えたい</span></div>
+        <div class="preview-short-item"><span class="short-role asst">Asst:</span><span class="short-content">Json レスポンスに変更しました。serde::Serialize を実装した構造体を…</span></div>
+        <hr class="preview-short-separator">
+        <div class="preview-short-item"><span class="short-role user">User:</span><span class="short-content">ログミドルウェア追加して</span></div>
+        <div class="preview-short-item"><span class="short-role asst">Asst:</span><span class="short-content">tracing + tower-http の TraceLayer を追加しました。リクエスト/レスポンス…</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-badge">both</span>
+    <span class="status-info">24 msgs</span>
+    <span class="status-divider">│</span>
+    <span class="status-help">C-j/k:msg  Opt-↑↓:branch  C-d/u:scroll  Tab:short/full  Enter:resume  C-y:copy</span>
+  </div>
+</div>
+
+<!-- Empty State -->
+<div id="state-empty" class="state-container hidden">
+  <div class="container">
+    <div class="left-pane">
+      <div class="search-pane">
+        <div class="search-input">
+          <span class="query">zzzzxxx</span>
+          <span class="cursor"></span>
+          <span style="flex:1"></span>
+          <span class="search-count">0/24</span>
+        </div>
+      </div>
+
+      <div class="messages-pane">
+        <div class="empty-state">No matches</div>
+      </div>
+
+      <div class="branch-pane">
+        <div class="branch-item selected"><span class="prefix">▶ </span><span class="branch-name">all</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name current">main</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/api</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/ci</span></div>
+      </div>
+    </div>
+
+    <div class="right-pane">
+      <div class="preview-pane empty-state">No messages to display</div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-badge">both</span>
+    <span class="status-info">0/24 msgs</span>
+    <span class="status-divider">│</span>
+    <span class="status-help">C-j/k:msg  Opt-↑↓:branch  C-d/u:scroll  gg/G:top/btm  Tab:short/full  Enter:resume  C-y:copy</span>
+  </div>
+</div>
+
+<!-- Copied State -->
+<div id="state-copied" class="state-container hidden">
+  <div class="container">
+    <div class="left-pane">
+      <div class="search-pane">
+        <div class="search-input">
+          <span class="placeholder">type to search...</span>
+          <span style="flex:1"></span>
+          <span class="search-count">24/24</span>
+        </div>
+      </div>
+
+      <div class="messages-pane">
+        <div class="session-separator"><span class="sep-id">85449c0d-f9d4-4c1e-899f-9f0e72d0d7d4</span> <span class="sep-branch current">main</span></div>
+        <div class="message-item selected"><span class="prefix">&gt; </span>RustでHTTPサーバーを作りたい</div>
+        <div class="message-item"><span class="prefix">  </span>エラーハンドリングも追加して</div>
+        <div class="message-item"><span class="prefix">  </span>テスト書いて</div>
+        <div class="session-separator"><span class="sep-id">a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d</span> <span class="sep-branch">feat/api</span></div>
+        <div class="message-item"><span class="prefix">  </span>REST APIのエンドポイント設計して</div>
+        <div class="message-item"><span class="prefix">  </span>認証ミドルウェア追加して</div>
+      </div>
+
+      <div class="branch-pane">
+        <div class="branch-item selected"><span class="prefix">▶ </span><span class="branch-name">all</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name current">main</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/api</span></div>
+        <div class="branch-item"><span class="prefix">  </span><span class="branch-name">feat/ci</span></div>
+      </div>
+    </div>
+
+    <div class="right-pane">
+      <div class="preview-pane">
+        <div class="role-user">User:</div>
+        <div class="user-content">&gt; RustでHTTPサーバーを作りたい</div>
+        <div class="role-assistant">Assistant:</div>
+        <div class="assistant-content">
+          <span class="inline-code">`axum`</span> を使った実装を提案します。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-badge" style="background:var(--green)">Copied: 85449c0d-f9d4-4c1e-899f-9f0e72d0d7d4</span>
+    <span class="status-info">24 msgs</span>
+    <span class="status-divider">│</span>
+    <span class="status-help">C-j/k:msg  Opt-↑↓:branch  C-d/u:scroll  gg/G:top/btm  Tab:short/full  Enter:resume  C-y:copy</span>
+  </div>
+</div>
+
+<script>
+function showState(state) {
+  document.querySelectorAll('.state-container').forEach(el => el.classList.add('hidden'));
+  document.getElementById('state-' + state).classList.remove('hidden');
+  document.querySelectorAll('.variant-tab').forEach(el => el.classList.remove('active'));
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
