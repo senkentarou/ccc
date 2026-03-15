@@ -5,7 +5,6 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
-use std::os::unix::process::CommandExt;
 use std::process::Command;
 use std::time::Duration;
 
@@ -25,17 +24,20 @@ pub enum PreviewMode {
     Short,
 }
 
-/// An item in the cross-session message list.
+/// An entry in the cross-session message list, grouping session context with item kind.
 #[derive(Debug, Clone)]
-pub enum MessageListItem {
-    /// Session separator showing `session_id` and branch.
-    Separator {
-        session_id: String,
-        branch: Option<String>,
-    },
-    /// A user message with its `session_id` and index within the session.
+pub struct MessageListItem {
+    pub session_id: String,
+    pub kind: MessageListItemKind,
+}
+
+/// The kind of item in the message list.
+#[derive(Debug, Clone)]
+pub enum MessageListItemKind {
+    /// Session separator showing branch info.
+    Separator { branch: Option<String> },
+    /// A user message with its index within the session.
     UserMessage {
-        session_id: String,
         #[allow(dead_code)]
         message_index: usize,
         content_first_line: String,
@@ -154,18 +156,22 @@ impl App {
             }
 
             // Add separator
-            self.message_list.push(MessageListItem::Separator {
+            self.message_list.push(MessageListItem {
                 session_id: session.session_id.clone(),
-                branch: session.git_branch.clone(),
+                kind: MessageListItemKind::Separator {
+                    branch: session.git_branch.clone(),
+                },
             });
 
             // Add user messages
             for msg in user_messages {
                 let first_line = msg.content.lines().next().unwrap_or("").to_string();
-                self.message_list.push(MessageListItem::UserMessage {
+                self.message_list.push(MessageListItem {
                     session_id: session.session_id.clone(),
-                    message_index: msg.index,
-                    content_first_line: first_line,
+                    kind: MessageListItemKind::UserMessage {
+                        message_index: msg.index,
+                        content_first_line: first_line,
+                    },
                 });
             }
         }
@@ -179,7 +185,7 @@ impl App {
     fn first_message_index(&self) -> usize {
         self.message_list
             .iter()
-            .position(|item| matches!(item, MessageListItem::UserMessage { .. }))
+            .position(|item| matches!(item.kind, MessageListItemKind::UserMessage { .. }))
             .unwrap_or(0)
     }
 
@@ -187,7 +193,10 @@ impl App {
     fn message_move_down(&mut self) {
         let start = self.message_index + 1;
         for i in start..self.message_list.len() {
-            if matches!(self.message_list[i], MessageListItem::UserMessage { .. }) {
+            if matches!(
+                self.message_list[i].kind,
+                MessageListItemKind::UserMessage { .. }
+            ) {
                 self.message_index = i;
                 self.preview_scroll = 0;
                 return;
@@ -201,7 +210,10 @@ impl App {
             return;
         }
         for i in (0..self.message_index).rev() {
-            if matches!(self.message_list[i], MessageListItem::UserMessage { .. }) {
+            if matches!(
+                self.message_list[i].kind,
+                MessageListItemKind::UserMessage { .. }
+            ) {
                 self.message_index = i;
                 self.preview_scroll = 0;
                 return;
@@ -219,17 +231,16 @@ impl App {
 
     /// Get the session ID of the currently selected message.
     fn selected_session_id(&self) -> Option<String> {
-        match self.message_list.get(self.message_index)? {
-            MessageListItem::UserMessage { session_id, .. }
-            | MessageListItem::Separator { session_id, .. } => Some(session_id.clone()),
-        }
+        self.message_list
+            .get(self.message_index)
+            .map(|item| item.session_id.clone())
     }
 
     /// Count of user messages currently shown in the message list.
     pub fn visible_message_count(&self) -> usize {
         self.message_list
             .iter()
-            .filter(|item| matches!(item, MessageListItem::UserMessage { .. }))
+            .filter(|item| matches!(item.kind, MessageListItemKind::UserMessage { .. }))
             .count()
     }
 
@@ -369,19 +380,7 @@ impl App {
         } else {
             let results = fuzzy::rank_sessions(self.store.sessions(), &self.search_query);
 
-            if results.is_empty() {
-                self.session_order = Vec::new();
-            } else {
-                self.session_order = results
-                    .iter()
-                    .filter_map(|r| {
-                        self.store
-                            .sessions()
-                            .iter()
-                            .position(|s| s.session_id == r.session_id)
-                    })
-                    .collect();
-            }
+            self.session_order = results.iter().map(|r| r.session_index).collect();
         }
 
         self.rebuild_message_list();
@@ -551,13 +550,34 @@ impl App {
     }
 
     /// Execute session resume after terminal cleanup.
+    ///
+    /// On Unix, uses `exec()` to replace the current process.
+    /// On other platforms, spawns a child process and exits.
+    #[cfg(unix)]
     pub fn execute_resume(session_id: &str) -> ! {
+        use std::os::unix::process::CommandExt;
         let err = Command::new("claude")
             .arg("--resume")
             .arg(session_id)
             .exec();
         eprintln!("Failed to exec claude: {err}");
         std::process::exit(1);
+    }
+
+    /// Execute session resume after terminal cleanup (non-Unix fallback).
+    #[cfg(not(unix))]
+    pub fn execute_resume(session_id: &str) -> ! {
+        match Command::new("claude")
+            .arg("--resume")
+            .arg(session_id)
+            .status()
+        {
+            Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+            Err(e) => {
+                eprintln!("Failed to run claude: {e}");
+                std::process::exit(1);
+            }
+        }
     }
 }
 
@@ -633,14 +653,14 @@ mod tests {
         let user_msg_count = app
             .message_list
             .iter()
-            .filter(|item| matches!(item, MessageListItem::UserMessage { .. }))
+            .filter(|item| matches!(item.kind, MessageListItemKind::UserMessage { .. }))
             .count();
         assert_eq!(user_msg_count, 4); // 2 from session-1, 1 from session-2, 1 from session-3
 
         let sep_count = app
             .message_list
             .iter()
-            .filter(|item| matches!(item, MessageListItem::Separator { .. }))
+            .filter(|item| matches!(item.kind, MessageListItemKind::Separator { .. }))
             .count();
         assert_eq!(sep_count, 3); // one per session
     }
@@ -656,7 +676,7 @@ mod tests {
         let user_msg_count = app
             .message_list
             .iter()
-            .filter(|item| matches!(item, MessageListItem::UserMessage { .. }))
+            .filter(|item| matches!(item.kind, MessageListItemKind::UserMessage { .. }))
             .count();
         assert_eq!(user_msg_count, 3); // 2 from session-1, 1 from session-3
     }
@@ -667,7 +687,10 @@ mod tests {
         let first_idx = app.message_index;
         assert!(matches!(
             app.message_list[first_idx],
-            MessageListItem::UserMessage { .. }
+            MessageListItem {
+                kind: MessageListItemKind::UserMessage { .. },
+                ..
+            }
         ));
 
         // Move down
@@ -675,7 +698,10 @@ mod tests {
         assert!(app.message_index > first_idx);
         assert!(matches!(
             app.message_list[app.message_index],
-            MessageListItem::UserMessage { .. }
+            MessageListItem {
+                kind: MessageListItemKind::UserMessage { .. },
+                ..
+            }
         ));
 
         // Move up
@@ -690,14 +716,17 @@ mod tests {
         // First message_index should point to a UserMessage, not a Separator
         assert!(matches!(
             app.message_list[app.message_index],
-            MessageListItem::UserMessage { .. }
+            MessageListItem {
+                kind: MessageListItemKind::UserMessage { .. },
+                ..
+            }
         ));
 
         // Verify separators exist in the list
         assert!(app
             .message_list
             .iter()
-            .any(|item| matches!(item, MessageListItem::Separator { .. })));
+            .any(|item| matches!(item.kind, MessageListItemKind::Separator { .. })));
     }
 
     #[test]

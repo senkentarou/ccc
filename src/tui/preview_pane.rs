@@ -32,7 +32,10 @@ pub fn render_preview_pane(
     };
 
     // Cap scroll so we don't scroll past content
-    let max_scroll = (lines.len() as u16).saturating_sub(area.height);
+    let max_scroll = lines
+        .len()
+        .saturating_sub(area.height as usize)
+        .min(u16::MAX as usize) as u16;
     let capped_scroll = scroll.min(max_scroll);
 
     let paragraph = Paragraph::new(lines)

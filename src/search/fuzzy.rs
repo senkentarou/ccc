@@ -4,11 +4,14 @@ use nucleo::Utf32Str;
 
 use crate::store::session::Session;
 
+/// Maximum number of characters to search per message (1M chars ≈ 4MB).
+const MAX_SEARCH_CHARS: usize = 1_000_000;
+
 /// A search result with score and matching info.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct SearchResult {
-    pub session_id: String,
+    pub session_index: usize,
     pub score: u32,
     pub matched_message_index: usize,
 }
@@ -30,13 +33,13 @@ pub fn rank_sessions(sessions: &[Session], query: &str) -> Vec<SearchResult> {
     let mut results = Vec::new();
     let mut buf = Vec::new();
 
-    for session in sessions {
+    for (session_idx, session) in sessions.iter().enumerate() {
         let mut best_score: u32 = 0;
         let mut best_index: usize = 0;
 
         for msg in &session.messages {
             buf.clear();
-            buf.extend(msg.content.chars());
+            buf.extend(msg.content.chars().take(MAX_SEARCH_CHARS));
             let haystack = Utf32Str::Unicode(&buf);
 
             if let Some(score) = pattern.score(haystack, &mut matcher) {
@@ -49,7 +52,7 @@ pub fn rank_sessions(sessions: &[Session], query: &str) -> Vec<SearchResult> {
 
         if best_score > 0 {
             results.push(SearchResult {
-                session_id: session.session_id.clone(),
+                session_index: session_idx,
                 score: best_score,
                 matched_message_index: best_index,
             });
@@ -131,7 +134,7 @@ mod tests {
 
         let results = rank_sessions(&sessions, "http server rust");
         assert!(!results.is_empty());
-        assert_eq!(results[0].session_id, "s1");
+        assert_eq!(results[0].session_index, 0);
     }
 
     #[test]
@@ -171,6 +174,6 @@ mod tests {
 
         let results = rank_sessions(&sessions, "HTTP");
         assert!(!results.is_empty());
-        assert_eq!(results[0].session_id, "s1");
+        assert_eq!(results[0].session_index, 0);
     }
 }

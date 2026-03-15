@@ -59,8 +59,7 @@ impl SessionStore {
         let mut sessions: Vec<Session> = files
             .par_iter()
             .filter_map(|file| match jsonl::parse_session_file(file) {
-                Ok(Some(session)) => Some(session),
-                Ok(None) => None,
+                Ok(result) => result.session,
                 Err(e) => {
                     eprintln!("Warning: Failed to parse {}: {}", file.display(), e);
                     None
@@ -81,8 +80,11 @@ impl SessionStore {
 
         for file in files {
             match jsonl::parse_session_file(file) {
-                Ok(Some(session)) => sessions.push(session),
-                Ok(None) => {}
+                Ok(result) => {
+                    if let Some(session) = result.session {
+                        sessions.push(session);
+                    }
+                }
                 Err(e) => {
                     eprintln!("Warning: Failed to parse {}: {}", file.display(), e);
                 }
@@ -142,15 +144,12 @@ impl SessionStore {
 
     /// Get unique branch names from all sessions, sorted alphabetically.
     pub fn branches(&self) -> Vec<String> {
-        let mut branches: Vec<String> = self
-            .sessions
+        self.sessions
             .iter()
             .filter_map(|s| s.git_branch.clone())
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
-            .collect();
-        branches.sort();
-        branches
+            .collect()
     }
 
     /// Get session indices filtered by branch.

@@ -5,7 +5,7 @@ use ratatui::widgets::{List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 use unicode_width::UnicodeWidthStr;
 
-use crate::app::MessageListItem;
+use crate::app::{MessageListItem, MessageListItemKind};
 
 /// Render the message list pane showing cross-session user messages with separators.
 pub fn render_message_pane(
@@ -27,13 +27,9 @@ pub fn render_message_pane(
 
     let list_items: Vec<ListItem> = items
         .iter()
-        .map(|item| match item {
-            MessageListItem::Separator { session_id, branch } => {
-                let short_id = if session_id.len() > 8 {
-                    &session_id[..8]
-                } else {
-                    session_id
-                };
+        .map(|item| match &item.kind {
+            MessageListItemKind::Separator { branch } => {
+                let short_id = item.session_id.get(..8).unwrap_or(&item.session_id);
 
                 // Build label: "─ <id> <branch> ─"
                 let mut label = format!("─ {short_id}");
@@ -69,7 +65,7 @@ pub fn render_message_pane(
 
                 ListItem::new(Line::from(spans))
             }
-            MessageListItem::UserMessage {
+            MessageListItemKind::UserMessage {
                 content_first_line, ..
             } => {
                 let truncated = truncate_str(content_first_line, max_width);

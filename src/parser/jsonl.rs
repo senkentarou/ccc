@@ -112,8 +112,17 @@ fn extract_tag(content: &str, tag: &str) -> Option<String> {
     }
 }
 
+/// Result of parsing a session file, including parse statistics.
+pub struct ParseResult {
+    pub session: Option<Session>,
+    /// Number of lines that could not be parsed as JSON.
+    #[allow(dead_code)]
+    pub skipped_lines: usize,
+}
+
 /// Parse a single JSONL session file into a `Session` with its `Message`s.
-pub fn parse_session_file(path: &Path) -> Result<Option<Session>> {
+#[allow(clippy::too_many_lines)]
+pub fn parse_session_file(path: &Path) -> Result<ParseResult> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read session file: {}", path.display()))?;
 
@@ -127,6 +136,7 @@ pub fn parse_session_file(path: &Path) -> Result<Option<Session>> {
     let mut cwd = String::new();
     let mut git_branch: Option<String> = None;
     let mut index = 0usize;
+    let mut skipped_lines = 0usize;
 
     for line in content.lines() {
         let line = line.trim();
@@ -134,9 +144,9 @@ pub fn parse_session_file(path: &Path) -> Result<Option<Session>> {
             continue;
         }
 
-        let record: RawRecord = match serde_json::from_str(line) {
-            Ok(r) => r,
-            Err(_) => continue, // Skip malformed lines
+        let Ok(record) = serde_json::from_str::<RawRecord>(line) else {
+            skipped_lines += 1;
+            continue;
         };
 
         // Extract cwd from any record that has it
@@ -210,7 +220,10 @@ pub fn parse_session_file(path: &Path) -> Result<Option<Session>> {
     }
 
     if messages.is_empty() {
-        return Ok(None);
+        return Ok(ParseResult {
+            session: None,
+            skipped_lines,
+        });
     }
 
     let first_timestamp = messages.iter().filter_map(|m| m.timestamp).min();
@@ -231,7 +244,10 @@ pub fn parse_session_file(path: &Path) -> Result<Option<Session>> {
         git_branch,
     };
 
-    Ok(Some(session))
+    Ok(ParseResult {
+        session: Some(session),
+        skipped_lines,
+    })
 }
 
 /// Resolve a project path to its hash used by Claude Code.
@@ -295,7 +311,7 @@ mod tests {
 {"type":"assistant","message":{"role":"assistant","content":"Hi there!"},"timestamp":"2026-03-15T14:30:01.000Z","sessionId":"abc123","cwd":"/home/user/project"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         assert_eq!(session.messages.len(), 2);
         assert_eq!(session.messages[0].role, Role::User);
@@ -310,7 +326,7 @@ mod tests {
         let jsonl = r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Part 1"},{"type":"text","text":"Part 2"},{"type":"tool_use","id":"123"}]},"timestamp":"2026-03-15T14:30:00.000Z","sessionId":"abc123"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         assert_eq!(session.messages.len(), 1);
         assert_eq!(session.messages[0].content, "Part 1\nPart 2");
@@ -324,17 +340,19 @@ mod tests {
 "#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let result = parse_session_file(file.path()).unwrap();
+        let session = result.session.unwrap();
 
         assert_eq!(session.messages.len(), 1);
         assert_eq!(session.messages[0].content, "Hello");
+        assert_eq!(result.skipped_lines, 1); // "not valid json" was skipped
     }
 
     #[test]
     fn test_empty_file_returns_none() {
         let file = create_temp_jsonl("");
         let result = parse_session_file(file.path()).unwrap();
-        assert!(result.is_none());
+        assert!(result.session.is_none());
     }
 
     #[test]
@@ -343,7 +361,7 @@ mod tests {
             r#"{"type":"result","subtype":"success","timestamp":"2026-03-15T14:30:00.000Z"}"#;
         let file = create_temp_jsonl(jsonl);
         let result = parse_session_file(file.path()).unwrap();
-        assert!(result.is_none());
+        assert!(result.session.is_none());
     }
 
     #[test]
@@ -357,7 +375,7 @@ mod tests {
         let jsonl = r#"{"type":"user","message":{"role":"user","content":""},"timestamp":"2026-03-15T14:30:00.000Z","sessionId":"abc123"}"#;
         let file = create_temp_jsonl(jsonl);
         let result = parse_session_file(file.path()).unwrap();
-        assert!(result.is_none());
+        assert!(result.session.is_none());
     }
 
     #[test]
@@ -365,7 +383,7 @@ mod tests {
         let jsonl = r#"{"type":"user","message":{"role":"user","content":"Hello"},"timestamp":"2026-03-15T14:30:00.000Z","sessionId":"abc123","cwd":"/home/user/project","gitBranch":"feat/api"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         assert_eq!(session.git_branch, Some("feat/api".to_string()));
     }
@@ -375,7 +393,7 @@ mod tests {
         let jsonl = r#"{"type":"user","message":{"role":"user","content":"Hello"},"timestamp":"2026-03-15T14:30:00.000Z","sessionId":"abc123","cwd":"/home/user/project"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         assert_eq!(session.git_branch, None);
     }
@@ -386,7 +404,7 @@ mod tests {
 {"type":"assistant","message":{"role":"assistant","content":"Hi!"},"timestamp":"2026-03-15T14:30:01.000Z","sessionId":"abc123","gitBranch":"feat/new"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         assert_eq!(session.git_branch, Some("main".to_string()));
     }
@@ -397,7 +415,7 @@ mod tests {
 {"type":"assistant","message":{"role":"assistant","content":"Setting up..."},"timestamp":"2026-03-15T14:30:01.000Z","sessionId":"abc123"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         assert_eq!(session.messages[0].content, "/init-project");
     }
@@ -408,7 +426,7 @@ mod tests {
 {"type":"assistant","message":{"role":"assistant","content":"Creating PR..."},"timestamp":"2026-03-15T14:30:01.000Z","sessionId":"abc123"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         assert_eq!(session.messages[0].content, "/create-pr Fix login bug");
     }
@@ -419,7 +437,7 @@ mod tests {
 {"type":"assistant","message":{"role":"assistant","content":"Hi!"},"timestamp":"2026-03-15T14:30:01.000Z","sessionId":"abc123"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         // local-command-caveat message should be skipped
         assert_eq!(session.messages.len(), 1);
@@ -432,7 +450,7 @@ mod tests {
 {"type":"assistant","message":{"role":"assistant","content":"Ok"},"timestamp":"2026-03-15T14:30:01.000Z","sessionId":"abc123"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         // Interruption messages are skipped
         assert_eq!(session.messages.len(), 1);
@@ -445,7 +463,7 @@ mod tests {
 {"type":"assistant","message":{"role":"assistant","content":"Ok"},"timestamp":"2026-03-15T14:30:01.000Z","sessionId":"abc123"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         assert_eq!(session.messages.len(), 1);
         assert_eq!(session.messages[0].role, Role::Assistant);
@@ -458,7 +476,7 @@ mod tests {
 {"type":"user","message":{"role":"user","content":"Third"},"timestamp":"2026-03-15T14:30:02.000Z","sessionId":"abc123"}"#;
 
         let file = create_temp_jsonl(jsonl);
-        let session = parse_session_file(file.path()).unwrap().unwrap();
+        let session = parse_session_file(file.path()).unwrap().session.unwrap();
 
         assert_eq!(session.messages.len(), 3);
         assert_eq!(session.messages[0].index, 0);
