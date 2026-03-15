@@ -40,7 +40,7 @@ fn main() -> Result<()> {
     let store = SessionStore::load(&project_path)?;
 
     if store.is_empty() {
-        eprintln!("No sessions found for project: {}", project_path);
+        eprintln!("No sessions found for project: {project_path}");
         eprintln!(
             "Make sure you're running ccc from a project directory where you've used Claude Code."
         );
@@ -51,14 +51,20 @@ fn main() -> Result<()> {
     let mut app = App::new(store, current_branch);
 
     let mut terminal = ratatui::init();
-    let result = app.run(&mut terminal);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.run(&mut terminal)));
     ratatui::restore();
 
-    result?;
+    match result {
+        Ok(inner) => inner?,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
 
     // If resume was requested, exec claude after terminal cleanup
     if let Some(session_id) = app.resume_session_id {
-        eprintln!("Resuming session {}...", &session_id[..8.min(session_id.len())]);
+        eprintln!(
+            "Resuming session {}...",
+            &session_id[..8.min(session_id.len())]
+        );
         App::execute_resume(&session_id);
     }
 

@@ -16,7 +16,7 @@ pub fn render_branch_pane(
         .iter()
         .enumerate()
         .map(|(i, branch)| {
-            let is_current = current_branch.map(|cb| cb == branch).unwrap_or(false);
+            let is_current = current_branch.is_some_and(|cb| cb == branch);
 
             let style = if is_current {
                 Style::default().fg(Color::Reset)

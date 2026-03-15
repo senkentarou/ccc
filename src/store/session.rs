@@ -34,7 +34,7 @@ pub struct Message {
 
 /// A session containing multiple messages.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
+#[allow(dead_code, clippy::struct_field_names)]
 pub struct Session {
     pub session_id: String,
     pub project_path: String,
@@ -94,6 +94,12 @@ impl SessionStore {
         Ok(Self { sessions })
     }
 
+    /// Create from pre-built sessions (for testing).
+    #[cfg(test)]
+    pub fn from_sessions(sessions: Vec<Session>) -> Self {
+        Self { sessions }
+    }
+
     /// Get all sessions.
     pub fn sessions(&self) -> &[Session] {
         &self.sessions
@@ -101,7 +107,7 @@ impl SessionStore {
 
     /// Get mutable sessions (for reordering by search score).
     #[allow(dead_code)]
-    pub fn sessions_mut(&mut self) -> &mut Vec<Session> {
+    pub const fn sessions_mut(&mut self) -> &mut Vec<Session> {
         &mut self.sessions
     }
 
@@ -151,25 +157,26 @@ impl SessionStore {
     /// If `branch` is None, return all sessions. Otherwise filter to matching branch.
     #[allow(dead_code)]
     pub fn sessions_by_branch(&self, branch: Option<&str>) -> Vec<usize> {
-        match branch {
-            None => (0..self.sessions.len()).collect(),
-            Some(b) => self
-                .sessions
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.git_branch.as_deref() == Some(b))
-                .map(|(i, _)| i)
-                .collect(),
-        }
+        branch.map_or_else(
+            || (0..self.sessions.len()).collect(),
+            |b| {
+                self.sessions
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, s)| s.git_branch.as_deref() == Some(b))
+                    .map(|(i, _)| i)
+                    .collect()
+            },
+        )
     }
 
     /// Get total number of sessions.
-    pub fn session_count(&self) -> usize {
+    pub const fn session_count(&self) -> usize {
         self.sessions.len()
     }
 
     /// Check if store is empty.
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.sessions.is_empty()
     }
 }

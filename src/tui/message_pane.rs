@@ -36,7 +36,7 @@ pub fn render_message_pane(
                 };
 
                 // Build label: "─ <id> <branch> ─"
-                let mut label = format!("─ {}", short_id);
+                let mut label = format!("─ {short_id}");
                 if let Some(branch_name) = branch {
                     label.push(' ');
                     label.push_str(branch_name);
@@ -55,9 +55,7 @@ pub fn render_message_pane(
                 spans.push(Span::styled(short_id.to_string(), dim));
 
                 if let Some(branch_name) = branch {
-                    let is_current = current_branch
-                        .map(|cb| cb == branch_name.as_str())
-                        .unwrap_or(false);
+                    let is_current = current_branch.is_some_and(|cb| cb == branch_name.as_str());
                     let branch_style = if is_current {
                         Style::default().fg(Color::Reset)
                     } else {
@@ -67,7 +65,7 @@ pub fn render_message_pane(
                     spans.push(Span::styled(branch_name.clone(), branch_style));
                 }
 
-                spans.push(Span::styled(format!(" {}", trail), dim));
+                spans.push(Span::styled(format!(" {trail}"), dim));
 
                 ListItem::new(Line::from(spans))
             }
@@ -99,7 +97,7 @@ pub fn render_message_pane(
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-/// Truncate a string to fit within max_width, considering unicode width.
+/// Truncate a string to fit within `max_width`, considering unicode width.
 pub fn truncate_str(s: &str, max_width: usize) -> String {
     let first_line = s.lines().next().unwrap_or("");
 

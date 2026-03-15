@@ -25,12 +25,12 @@ pub enum Action {
 ///
 /// Search input is always the default — typing characters adds to the query.
 /// Navigation and operations use Ctrl+key or special keys.
-pub fn map_key_event(key: KeyEvent, pending_g: bool) -> Action {
+pub const fn map_key_event(key: KeyEvent, pending_g: bool) -> Action {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 
     match key.code {
         // Ctrl+c / Ctrl+q / Esc → quit
-        KeyCode::Char('c') | KeyCode::Char('q') if ctrl => Action::Quit,
+        KeyCode::Char('c' | 'q') if ctrl => Action::Quit,
         KeyCode::Esc => Action::Quit,
 
         // Message navigation: Ctrl+j/k or ↑/↓

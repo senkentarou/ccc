@@ -31,6 +31,7 @@ pub struct AppLayout {
 }
 
 /// Calculate layout. `branch_count` determines the height of the branch pane.
+#[allow(clippy::cast_possible_truncation)] // ratatui uses u16 for coordinates
 pub fn calculate_layout(area: Rect, branch_count: usize) -> AppLayout {
     // Main split: content area + status bar
     let vertical = Layout::default()

@@ -10,6 +10,7 @@ use crate::store::session::{Message, Role};
 use crate::tui::message_pane::truncate_str;
 
 /// Render the preview pane (right side).
+#[allow(clippy::cast_possible_truncation)] // ratatui uses u16 for coordinates
 pub fn render_preview_pane(
     frame: &mut Frame,
     area: Rect,

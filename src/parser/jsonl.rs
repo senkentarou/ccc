@@ -45,8 +45,8 @@ struct ContentBlock {
 impl ContentValue {
     fn extract_text(&self) -> String {
         match self {
-            ContentValue::Text(s) => s.clone(),
-            ContentValue::Blocks(blocks) => blocks
+            Self::Text(s) => s.clone(),
+            Self::Blocks(blocks) => blocks
                 .iter()
                 .filter_map(|b| {
                     if b.block_type.as_deref() == Some("text") {
@@ -69,9 +69,7 @@ impl ContentValue {
 /// - `[Request interrupted by user]` etc. → kept as-is
 fn clean_content(content: &str) -> Option<String> {
     // Skip meta/system messages
-    if content.contains("<local-command-caveat>")
-        || content.contains("<local-command-stdout>")
-    {
+    if content.contains("<local-command-caveat>") || content.contains("<local-command-stdout>") {
         return None;
     }
 
@@ -90,7 +88,7 @@ fn clean_content(content: &str) -> Option<String> {
 
         if let Some(name) = cmd_name {
             return if let Some(args) = cmd_args {
-                Some(format!("{} {}", name, args))
+                Some(format!("{name} {args}"))
             } else {
                 Some(name)
             };
@@ -102,8 +100,8 @@ fn clean_content(content: &str) -> Option<String> {
 
 /// Extract content between `<tag>` and `</tag>`.
 fn extract_tag(content: &str, tag: &str) -> Option<String> {
-    let open = format!("<{}>", tag);
-    let close = format!("</{}>", tag);
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
     let start = content.find(&open)?;
     let end = content.find(&close)?;
     let inner_start = start + open.len();
@@ -144,7 +142,7 @@ pub fn parse_session_file(path: &Path) -> Result<Option<Session>> {
         // Extract cwd from any record that has it
         if cwd.is_empty() {
             if let Some(ref c) = record.cwd {
-                cwd = c.clone();
+                cwd.clone_from(c);
             }
         }
 
@@ -156,13 +154,12 @@ pub fn parse_session_file(path: &Path) -> Result<Option<Session>> {
         }
 
         let record_type = match record.record_type.as_deref() {
-            Some("user") | Some("assistant") => record.record_type.as_deref().unwrap(),
+            Some("user" | "assistant") => record.record_type.as_deref().unwrap(),
             _ => continue,
         };
 
-        let raw_msg = match record.message {
-            Some(m) => m,
-            None => continue,
+        let Some(raw_msg) = record.message else {
+            continue;
         };
 
         let role = match raw_msg.role.as_deref() {

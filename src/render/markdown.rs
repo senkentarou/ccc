@@ -2,14 +2,19 @@ use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
-/// Maximum input size for markdown rendering (1MB) to prevent DoS.
+/// Maximum input size for markdown rendering (1MB) to prevent `DoS`.
 const MAX_INPUT_SIZE: usize = 1_048_576;
 
 /// Convert markdown text to ratatui Lines with basic formatting.
+#[allow(clippy::too_many_lines)]
 pub fn render_markdown(input: &str) -> Vec<Line<'static>> {
-    // Enforce size limit
+    // Enforce size limit (respect UTF-8 char boundary)
     let input = if input.len() > MAX_INPUT_SIZE {
-        &input[..MAX_INPUT_SIZE]
+        let mut end = MAX_INPUT_SIZE;
+        while end > 0 && !input.is_char_boundary(end) {
+            end -= 1;
+        }
+        &input[..end]
     } else {
         input
     };
@@ -32,7 +37,7 @@ pub fn render_markdown(input: &str) -> Vec<Line<'static>> {
                     let style = Style::default()
                         .fg(Color::Cyan)
                         .add_modifier(Modifier::BOLD);
-                    current_spans.push(Span::styled(format!("{} ", prefix), style));
+                    current_spans.push(Span::styled(format!("{prefix} "), style));
                     style_stack.push(style);
                 }
                 Tag::CodeBlock(_) => {
@@ -52,7 +57,7 @@ pub fn render_markdown(input: &str) -> Vec<Line<'static>> {
                 Tag::Item => {
                     let indent = "  ".repeat(list_depth.saturating_sub(1));
                     current_spans.push(Span::styled(
-                        format!("{}• ", indent),
+                        format!("{indent}• "),
                         Style::default().fg(Color::Yellow),
                     ));
                 }
@@ -64,7 +69,6 @@ pub fn render_markdown(input: &str) -> Vec<Line<'static>> {
                     let style = Style::default().add_modifier(Modifier::BOLD);
                     style_stack.push(style);
                 }
-                Tag::Paragraph => {}
                 _ => {}
             },
             Event::End(tag_end) => match tag_end {
@@ -99,7 +103,7 @@ pub fn render_markdown(input: &str) -> Vec<Line<'static>> {
                     // Render code block lines individually
                     for code_line in text.to_string().lines() {
                         current_spans.push(Span::styled(
-                            format!("  {}", code_line),
+                            format!("  {code_line}"),
                             Style::default().fg(Color::Green),
                         ));
                         lines.push(Line::from(std::mem::take(&mut current_spans)));
@@ -111,7 +115,7 @@ pub fn render_markdown(input: &str) -> Vec<Line<'static>> {
             }
             Event::Code(code) => {
                 current_spans.push(Span::styled(
-                    format!("`{}`", code),
+                    format!("`{code}`"),
                     Style::default().fg(Color::Green),
                 ));
             }

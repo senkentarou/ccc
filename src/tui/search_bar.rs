@@ -11,7 +11,8 @@ use unicode_width::UnicodeWidthStr;
 /// - ` > ` prefix
 /// - Block cursor via background color highlight
 /// - Match count right-aligned
-/// - cursor_pos is character-based (not byte-based)
+/// - `cursor_pos` is character-based (not byte-based)
+#[allow(clippy::cast_possible_truncation)] // ratatui uses u16 for coordinates
 pub fn render_search_area(
     frame: &mut Frame,
     area: Rect,
@@ -20,25 +21,22 @@ pub fn render_search_area(
     match_count: usize,
     total_count: usize,
 ) {
-    let count_text = format!("{}/{}", match_count, total_count);
+    let count_text = format!("{match_count}/{total_count}");
     let prefix = "> ";
 
     if query.is_empty() {
         // Show block cursor at start position + placeholder
         let mut spans = vec![
             Span::styled(prefix, Style::default().fg(Color::Cyan)),
-            Span::styled(
-                " ",
-                Style::default().fg(Color::Reset).bg(Color::DarkGray),
-            ),
-            Span::styled(
-                "type to search...",
-                Style::default().fg(Color::DarkGray),
-            ),
+            Span::styled(" ", Style::default().fg(Color::Reset).bg(Color::DarkGray)),
+            Span::styled("type to search...", Style::default().fg(Color::DarkGray)),
         ];
 
         // Right-align count
-        let content_width: usize = spans.iter().map(|s| s.content.len()).sum();
+        let content_width: usize = spans
+            .iter()
+            .map(|s| UnicodeWidthStr::width(s.content.as_ref()))
+            .sum();
         let padding = area
             .width
             .saturating_sub(content_width as u16 + count_text.len() as u16);
@@ -101,7 +99,10 @@ pub fn render_search_area(
     }
 
     // Right-align count
-    let content_width: usize = spans.iter().map(|s| s.content.len()).sum();
+    let content_width: usize = spans
+        .iter()
+        .map(|s| UnicodeWidthStr::width(s.content.as_ref()))
+        .sum();
     let padding = area
         .width
         .saturating_sub(content_width as u16 + count_text.len() as u16);
