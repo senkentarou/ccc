@@ -258,28 +258,67 @@ pub fn resolve_project_hash(project_path: &str) -> String {
     project_path.replace('/', "-")
 }
 
-/// Discover all .jsonl session files for a given project path.
+/// Collect all .jsonl files from a directory.
+fn collect_jsonl_files(dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir)
+        .with_context(|| format!("Failed to read directory: {}", dir.display()))?
+    {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+            files.push(path);
+        }
+    }
+    Ok(files)
+}
+
+/// Discover all .jsonl session files for a given project path,
+/// including sessions from Claude Code worktrees.
 pub fn discover_session_files(project_path: &str) -> Result<Vec<PathBuf>> {
     let claude_dir = dirs::home_dir()
         .context("Could not determine home directory")?
         .join(".claude")
         .join("projects");
 
-    let hash = resolve_project_hash(project_path);
-    let project_dir = claude_dir.join(&hash);
+    discover_session_files_in(&claude_dir, project_path)
+}
 
-    if !project_dir.exists() {
-        return Ok(Vec::new());
+/// Internal: discover session files within a given projects directory.
+/// Separated for testability.
+fn discover_session_files_in(claude_dir: &Path, project_path: &str) -> Result<Vec<PathBuf>> {
+    let hash = resolve_project_hash(project_path);
+    let worktree_prefix = format!("{hash}--claude-worktrees-");
+
+    // Collect project dirs: main + worktree directories
+    let mut project_dirs = Vec::new();
+    let main_dir = claude_dir.join(&hash);
+    if main_dir.exists() {
+        project_dirs.push(main_dir);
     }
 
+    // Scan projects dir for worktree directories
+    if let Ok(entries) = fs::read_dir(claude_dir) {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with(&worktree_prefix) {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        project_dirs.push(path);
+                    }
+                }
+            }
+        }
+    }
+
+    // Collect .jsonl files from all matching directories
     let mut files = Vec::new();
-    for entry in fs::read_dir(&project_dir)
-        .with_context(|| format!("Failed to read directory: {}", project_dir.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-            files.push(path);
+    for dir in &project_dirs {
+        match collect_jsonl_files(dir) {
+            Ok(mut dir_files) => files.append(&mut dir_files),
+            Err(e) => {
+                eprintln!("Warning: {e}");
+            }
         }
     }
 
@@ -467,6 +506,53 @@ mod tests {
 
         assert_eq!(session.messages.len(), 1);
         assert_eq!(session.messages[0].role, Role::Assistant);
+    }
+
+    #[test]
+    fn test_discover_includes_worktree_sessions() {
+        let tmp = tempfile::tempdir().unwrap();
+        let projects_dir = tmp.path().join(".claude").join("projects");
+
+        // Create main project dir with a session file
+        let main_dir = projects_dir.join("-Users-user-work-myproject");
+        fs::create_dir_all(&main_dir).unwrap();
+        fs::write(main_dir.join("session1.jsonl"), "{}").unwrap();
+
+        // Create worktree dir with a session file
+        let wt_dir =
+            projects_dir.join("-Users-user-work-myproject--claude-worktrees-fancy-branch");
+        fs::create_dir_all(&wt_dir).unwrap();
+        fs::write(wt_dir.join("session2.jsonl"), "{}").unwrap();
+
+        // Create unrelated project dir (should NOT be included)
+        let other_dir = projects_dir.join("-Users-user-work-myproject-extra");
+        fs::create_dir_all(&other_dir).unwrap();
+        fs::write(other_dir.join("session3.jsonl"), "{}").unwrap();
+
+        let files =
+            discover_session_files_in(&projects_dir, "/Users/user/work/myproject").unwrap();
+
+        let filenames: Vec<&str> = files
+            .iter()
+            .map(|f| f.file_name().unwrap().to_str().unwrap())
+            .collect();
+        assert!(filenames.contains(&"session1.jsonl"));
+        assert!(filenames.contains(&"session2.jsonl"));
+        assert!(!filenames.contains(&"session3.jsonl"));
+    }
+
+    #[test]
+    fn test_discover_worktree_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let projects_dir = tmp.path().join(".claude").join("projects");
+
+        // No main project dir, only worktree dir
+        let wt_dir = projects_dir.join("-Users-user-work-proj--claude-worktrees-wt1");
+        fs::create_dir_all(&wt_dir).unwrap();
+        fs::write(wt_dir.join("s1.jsonl"), "{}").unwrap();
+
+        let files = discover_session_files_in(&projects_dir, "/Users/user/work/proj").unwrap();
+        assert_eq!(files.len(), 1);
     }
 
     #[test]
