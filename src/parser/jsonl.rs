@@ -253,9 +253,10 @@ pub fn parse_session_file(path: &Path) -> Result<ParseResult> {
 /// Resolve a project path to its hash used by Claude Code.
 /// Claude Code uses a hash of the absolute path as the directory name.
 pub fn resolve_project_hash(project_path: &str) -> String {
-    // Claude Code replaces all `/` with `-`, keeping the leading `-`.
+    // Claude Code replaces `/` and `.` with `-`.
     // e.g. "/Users/user/work/project" → "-Users-user-work-project"
-    project_path.replace('/', "-")
+    // e.g. "/Users/user/dotfiles/.config/nvim" → "-Users-user-dotfiles--config-nvim"
+    project_path.replace(['/', '.'], "-")
 }
 
 /// Collect all .jsonl files from a directory.
@@ -407,6 +408,12 @@ mod tests {
     fn test_resolve_project_hash() {
         let hash = resolve_project_hash("/Users/user/work/my-project");
         assert_eq!(hash, "-Users-user-work-my-project");
+    }
+
+    #[test]
+    fn test_resolve_project_hash_with_dots() {
+        let hash = resolve_project_hash("/Users/user/dotfiles/.config/nvim");
+        assert_eq!(hash, "-Users-user-dotfiles--config-nvim");
     }
 
     #[test]
